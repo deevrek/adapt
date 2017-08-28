@@ -12,19 +12,6 @@ def is_entity(tag, entity_name):
 
 
 def find_first_tag(tags, entity_type, after_index=-1):
-    """Searches tags for entity type after given index
-
-    Args:
-        tags(list): a list of tags with entity types to be compaired too entity_type
-        entity_type(str): This is he entity type to be looking for in tags
-        after_index(int): the start token must be greaterthan this.
-
-    Returns:
-        ( tag, v, confidence ):
-            tag(str): is the tag that matched
-            v(str): ? the word that matched?
-            confidence(float): is a mesure of accuacy.  1 is full confidence and 0 is none.
-    """
     for tag in tags:
         for entity in tag.get('entities'):
             for v, t in entity.get('data'):
@@ -42,18 +29,6 @@ def find_next_tag(tags, end_index=0):
 
 
 def choose_1_from_each(lists):
-    """Takes a list of lists and returns a list of lists with one item
-    from each list.  This new list should be the length of each list multiplied
-    by the others.  18 for an list with lists of 3, 2 and 3.  Also the lenght
-    of each sub list should be same as the length of lists passed in.
-
-    Args:
-        lists(list of Lists):  A list of lists
-
-    Returns:
-        list of lists: returns a list of lists constructions of one item from each
-            list in lists.
-    """
     if len(lists) == 0:
         yield []
     else:
@@ -63,17 +38,9 @@ def choose_1_from_each(lists):
 
 
 def resolve_one_of(tags, at_least_one):
-    """This searches tags for Entites in at_least_one and returns any match
-
-    Args:
-        tags(list): List of tags with Entities to search for Entities
-        at_least_one(list): List of Entities to find in tags
-
-    Returns:
-        object: returns None if no match is found but returns any match as an object
-    """
     if len(tags) < len(at_least_one):
         return None
+    valid_entities={}
     for possible_resolution in choose_1_from_each(at_least_one):
         resolution = {}
         pr = possible_resolution[:]
@@ -88,48 +55,26 @@ def resolve_one_of(tags, at_least_one):
                 if entity_type not in resolution:
                     resolution[entity_type] = []
                 resolution[entity_type].append(tag)
-        if len(resolution) == len(possible_resolution):
-            return resolution
-
+        
+        if len(resolution) >= len(possible_resolution):
+            valid_entities.update(resolution)
+    if len(valid_entities):
+        return valid_entities
     return None
 
 
 class Intent(object):
     def __init__(self, name, requires, at_least_one, optional):
-        """Create Intent object
-
-        Args:
-            name(str): Name for Intent
-            requires(list): Entities that are required
-            at_least_one(list): One of these Entities are required
-            optional(list): Optional Entities used by the intent
-        """
         self.name = name
         self.requires = requires
         self.at_least_one = at_least_one
         self.optional = optional
 
     def validate(self, tags, confidence):
-        """Using this method removes tags from the result of validate_with_tags
-
-        Returns:
-            intent(intent): Resuts from validate_with_tags
-        """
         intent, tags = self.validate_with_tags(tags, confidence)
         return intent
 
     def validate_with_tags(self, tags, confidence):
-        """Validate weather tags has required entites for this intent to fire
-
-        Args:
-            tags(list): Tags and Entities used for validation
-            confidence(float): ?
-
-        Returns:
-            intent, tags: Returns intent and tags used by the intent on
-                falure to meat required entities then returns intent with confidence
-                of 0.0 and an empty list for tags.
-        """
         result = {'intent_type': self.name}
         intent_confidence = 0.0
         local_tags = tags[:]
@@ -155,11 +100,14 @@ class Intent(object):
                 return result, []
             else:
                 for key in best_resolution:
-                    result[key] = best_resolution[key][0].get('key') # TODO: at least one must support aliases
-                    intent_confidence += 1.0
-                used_tags.append(best_resolution)
-                if best_resolution in local_tags:
-                    local_tags.remove(best_resolution)
+#                    result[key] = best_resolution[key][0].get('key') # TODO: at least one must support aliases
+                    oneof_tag, canonical_form, confidence = find_first_tag(local_tags, key)
+                    intent_confidence += confidence
+                    result[key] = canonical_form
+#                used_tags.append(best_resolution[key][0])
+                    used_tags.append(oneof_tag)
+                    if oneof_tag in local_tags:
+                        local_tags.remove(oneof_tag)
 
         for optional_type, attribute_name in self.optional:
             optional_tag, canonical_form, conf = find_first_tag(local_tags, optional_type)
@@ -184,27 +132,14 @@ class Intent(object):
 class IntentBuilder(object):
     """
     IntentBuilder, used to construct intent parsers.
-
-    Attributes:
-        at_least_one(list): A list of Entities where one is required.
-            These are seperated into lists so you can have one of (A or B) and
-            then require one of (D or F).
-        requires(list): A list of Required Entities
-        optional(list): A list of optional Entities
-        name(str): Name of intent
-
-    Notes:
-        This is designed to allow construction of intents in one line.
-
-    Example:
-        IntentBuilder("Intent").requires("A").one_of("C","D").optional("G").build()
     """
     def __init__(self, intent_name):
         """
         Constructor
 
-        Args:
-            intent_name(str): the name of the intents that this parser parses/validates
+        :param intent_name: the name of the intents that this parser parses/validates
+
+        :return: an instance of IntentBuilder
         """
         self.at_least_one = []
         self.requires = []
@@ -215,11 +150,9 @@ class IntentBuilder(object):
         """
         The intent parser should require one of the provided entity types to validate this clause.
 
-        Args:
-            args(args): *args notation list of entity names
+        :param args: *args notation list of entity names
 
-        Returns:
-            self: to continue modifications.
+        :return: self
         """
         self.at_least_one.append(args)
         return self
@@ -228,12 +161,11 @@ class IntentBuilder(object):
         """
         The intent parser should require an entity of the provided type.
 
-        Args:
-            entity_type(str): an entity type
-            attribute_name(str): the name of the attribute on the parsed intent. Defaults to match entity_type.
+        :param entity_type: string, an entity type
 
-        Returns:
-            self: to continue modifications.
+        :param attribute_name: string, the name of the attribute on the parsed intent. Defaults to match entity_type.
+
+        :return: self
         """
         if not attribute_name:
             attribute_name = entity_type
@@ -244,12 +176,11 @@ class IntentBuilder(object):
         """
         Parsed intents from this parser can optionally include an entity of the provided type.
 
-        Args:
-            entity_type(str): an entity type
-            attribute_name(str): the name of the attribute on the parsed intent. Defaults to match entity_type.
+        :param entity_type: string, an entity type
 
-        Returns:
-            self: to continue modifications.
+        :param attribute_name: string, the name of the attribute on the parsed intent. Defaults to match entity_type.
+
+        :return: self
         """
         if not attribute_name:
             attribute_name = entity_type
