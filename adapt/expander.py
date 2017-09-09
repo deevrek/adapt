@@ -157,11 +157,13 @@ class Lattice(object):
             for entity in self.nodes[index]:
                 for next_result in self.traverse(index=index+1):
                     if isinstance(entity, list):
-                        yield entity + next_result
+                        entity=entity + next_result
                     else:
-                        yield [entity] + next_result
+                        entity=[entity] + next_result
+                yield entity
         else:
             yield []
+
 
 
 class BronKerboschExpander(object):
