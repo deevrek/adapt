@@ -25,13 +25,23 @@ def find_first_tag(tags, entity_type, after_index=-1):
             v(str): ? the word that matched?
             confidence(float): is a mesure of accuacy.  1 is full confidence and 0 is none.
     """
+    current_len=0
     for tag in tags:
         for entity in tag.get('entities'):
             for v, t in entity.get('data'):
-                if t.lower() == entity_type.lower() and tag.get('start_token', 0) > after_index:
-                    return tag, v, entity.get('confidence')
-
-    return None, None, None
+                if current_len == 0:
+                    current_pos=tag.get('start_token', 0)
+                key_pos=tag.get('start_token', 0)
+                if t.lower() == entity_type.lower() and key_pos > after_index:
+                    if (key_pos <= current_pos) and (len(v) > current_len):
+                        valid_tag, valid_value, valid_confidence = \
+                            tag, v, entity.get('confidence')
+                        current_len=len(v)
+                        current_pos=tag.get('start_token', 0)
+    if current_len>0:
+        return valid_tag, valid_value, valid_confidence
+    else:
+        return None, None, None
 
 
 def find_next_tag(tags, end_index=0):
